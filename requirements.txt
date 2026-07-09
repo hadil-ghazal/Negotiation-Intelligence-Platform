@@ -1,0 +1,13 @@
+pandas
+numpy
+scipy
+scikit-learn
+matplotlib
+joblib
+
+torch
+transformers
+datasets
+accelerate
+evaluate
+sentencepiece

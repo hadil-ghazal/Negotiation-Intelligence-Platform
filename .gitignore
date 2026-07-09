@@ -1,0 +1,14 @@
+
+# Generated model artifacts
+models/*.pkl
+models/distilbert_concord/
+models/distilbert_logs/
+models/checkpoint-*/
+
+# Generated processed outputs
+data/processed/
+data/outputs/
+
+# Python cache
+__pycache__/
+*.pyc
