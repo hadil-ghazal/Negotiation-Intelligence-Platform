@@ -11,3 +11,8 @@ datasets
 accelerate
 evaluate
 sentencepiece
+
+gradio
+plotly
+tabulate
+
