@@ -84,11 +84,10 @@ TONE_META = {
  
  
 def get_position_style(raw_label: str) -> dict:
-    """Look up plain-language copy for a raw model label.
- 
-    Falls back to a title-cased version of the raw label with a neutral
-    tone if the label encoder ever produces something we haven't mapped,
-    so the UI never breaks or shows an unhandled internal value.
+    """Looking up plainlanguage copy for a raw model label
+    Falls bakc to a title cased version of the raw label with a neutral
+    tone if the lable encoder ever produces something we havent mapped,
+    so the UI never breaks or shows an unhandled internal value
     """
     key = str(raw_label).strip().lower()
     style = POSITION_STYLES.get(key)
@@ -98,10 +97,10 @@ def get_position_style(raw_label: str) -> dict:
  
  
 def get_confidence_tier(confidence: float) -> dict:
-    """Convert a raw softmax confidence score into a plain-language signal
-    strength, with a short actionable hint — "moderate confidence" means
-    nothing to most people on its own, but "worth a second look" tells you
-    what to actually do with that information.
+    """Converting a raw softmax confidence score into a plainlang signal
+    strength, with a short actionable hint : "moderate confidence" means
+    nothing to most people on its own, but "worth a second look tells you
+    what to actually do with that information
     """
     if confidence >= 0.75:
         return {"label": "Strong signal", "dots": 3, "hint": ""}
@@ -222,7 +221,7 @@ def get_action_guidance(framework: str, tone: str, perspective: str = "decision_
     """Concrete 'what this means for you' sentence for a framework+tone pair,
     for the given perspective ("decision_maker" or "requester"). Falls back
     to a generic-but-still-direct sentence for any framework/tone
-    combination not explicitly authored above."""
+    combination not explicitly authored above"""
     fallback = {
         "decision_maker": {
             "positive": "This framework doesn't flag a problem for you — no changes needed from this angle.",
@@ -336,7 +335,57 @@ def create_confidence_chart(results_df: pd.DataFrame):
     )
  
     return fig
-def create_framework_cards(results_df: pd.DataFrame, perspective: str = "decision_maker") -> str:
+
+
+def get_framework_scenario_guidance(framework: str, transcript: str, position: str) -> str:
+    #Return scenario-specific guidance for each framework card
+    scenario = detect_scenario(transcript)
+
+    guidance = {
+        "remote_work": {
+            "Legal & Rights Framework": "Check whether remote-work approvals are governed by policy, precedent, disability accommodation rules, or manager discretion.",
+            "Strategic & Economic Framework": "Evaluate productivity, retention risk, collaboration cost, and whether a trial period protects both sides.",
+            "Ethical Framework": "Make sure similarly situated employees would be treated consistently.",
+            "Behavioral & Psychological Framework": "Explain the decision clearly so it does not create resentment or perceived favoritism.",
+            "Stakeholder & Systems Framework": "Consider team coverage, meeting availability, and whether this becomes a broader workplace precedent.",
+            "Cultural & Social Framework": "Frame the decision around norms of flexibility, trust, and accountability.",
+        },
+        "vendor_contract": {
+            "Legal & Rights Framework": "Review contract terms, renewal rights, SLA language, and whether outages justify credits or renegotiation.",
+            "Strategic & Economic Framework": "Compare renewal cost against switching cost, outage impact, and vendor leverage.",
+            "Ethical Framework": "Balance fair pricing with accountability for prior service failures.",
+            "Behavioral & Psychological Framework": "Use the outage history to reset trust without making the negotiation purely punitive.",
+            "Stakeholder & Systems Framework": "Consider downstream users, operations teams, and business continuity risk.",
+            "Cultural & Social Framework": "Set expectations for responsiveness, transparency, and partnership norms.",
+        },
+        "family_care": {
+            "Legal & Rights Framework": "Clarify any formal care, financial, or medical decision responsibilities.",
+            "Strategic & Economic Framework": "Balance time contributions, financial contributions, opportunity cost, and burnout risk.",
+            "Ethical Framework": "Make the arrangement fair to both siblings and centered on the parent’s wellbeing.",
+            "Behavioral & Psychological Framework": "Address resentment directly before assigning duties.",
+            "Stakeholder & Systems Framework": "Include backup care, medical needs, schedules, and other family members affected.",
+            "Cultural & Social Framework": "Acknowledge family expectations, gender norms, birth-order assumptions, or cultural duties that may shape the conflict.",
+        },
+        "general": {
+            "Legal & Rights Framework": "Clarify rules, obligations, and enforceable expectations.",
+            "Strategic & Economic Framework": "Identify leverage, tradeoffs, costs, and incentives.",
+            "Ethical Framework": "Check whether the outcome is fair and harm-reducing.",
+            "Behavioral & Psychological Framework": "Watch for trust, emotion, resentment, or escalation risk.",
+            "Stakeholder & Systems Framework": "Map who else is affected by the agreement.",
+            "Cultural & Social Framework": "Account for norms, expectations, and communication style.",
+        },
+    }
+
+    return guidance.get(scenario, guidance["general"]).get(
+        framework,
+        "Use this framework to clarify what risk or compromise condition matters most."
+    )
+
+
+
+
+#def create_framework_cards(results_df: pd.DataFrame, perspective: str = "decision_maker") -> str:
+def create_framework_cards(results_df: pd.DataFrame, transcript: str, perspective: str = "decision_maker") -> str:
     cards = ""
     for _, row in results_df.iterrows():
         framework = row["framework"]
@@ -347,6 +396,7 @@ def create_framework_cards(results_df: pd.DataFrame, perspective: str = "decisio
         tier = get_confidence_tier(confidence)
         icon = FRAMEWORK_ICONS.get(framework, "•")
         action_text = get_action_guidance(framework, style["tone"], perspective)
+        scenario_text = get_framework_scenario_guidance(framework, transcript, position)
         dots = "".join(
             f'<span class="dot {"filled" if i < tier["dots"] else ""}"></span>'
             for i in range(3)
@@ -363,6 +413,7 @@ def create_framework_cards(results_df: pd.DataFrame, perspective: str = "decisio
                 <span>{style['icon']}</span> {style['headline']}
             </div>
             <p class="why-line">{action_text}</p>
+            <p class="scenario-line"><b>Scenario read:</b> {scenario_text}</p>
             <div class="confidence-footer">
                 <span class="dots">{dots}</span>
                 <span class="tier-label">{tier['label']}{hint}</span>
@@ -373,6 +424,68 @@ def create_framework_cards(results_df: pd.DataFrame, perspective: str = "decisio
     return cards
  
  
+
+def detect_scenario(transcript: str) -> str:
+    """Detect the negotiation domain from transcript keywords."""
+    text = transcript.lower()
+
+    if any(word in text for word in ["remote", "work from home", "office", "employee", "manager"]):
+        return "remote_work"
+    if any(word in text for word in ["vendor", "contract", "renewal", "price", "service outage"]):
+        return "vendor_contract"
+    if any(word in text for word in ["sibling", "parent", "care", "family", "aging"]):
+        return "family_care"
+    if any(word in text for word in ["salary", "raise", "promotion", "compensation"]):
+        return "compensation"
+    if any(word in text for word in ["rent", "tenant", "landlord", "housing", "lease"]):
+        return "housing"
+
+    return "general"
+
+
+
+def get_dynamic_compromise(transcript: str, top_position: str) -> str:
+    """Create a transcript-aware compromise recommendation."""
+    scenario = detect_scenario(transcript)
+
+    recommendations = {
+        "remote_work": {
+            "support": "Approve the remote-work request with written expectations for availability, productivity, communication, and review timing.",
+            "conditional_support": "Offer a 60–90 day remote-work trial with measurable productivity expectations, core collaboration hours, and a fairness policy for similar requests.",
+            "needs_more_info": "Request more detail on schedule, team coverage, productivity tracking, and whether similar employees would receive the same option.",
+        },
+        "vendor_contract": {
+            "support": "Proceed with renewal, but document service expectations, pricing terms, and escalation rights.",
+            "conditional_support": "Approve renewal only if the vendor accepts service credits, performance guarantees, or phased pricing tied to uptime improvements.",
+            "needs_more_info": "Request outage history, SLA performance, pricing justification, and alternative vendor comparisons before renewing.",
+        },
+        "family_care": {
+            "support": "Move toward agreement by formally dividing caregiving and financial responsibilities.",
+            "conditional_support": "Create a shared care plan with defined weekly tasks, financial contributions, backup coverage, and a monthly family check-in.",
+            "needs_more_info": "Clarify actual care hours, financial capacity, medical needs, and each sibling’s availability before assigning responsibilities.",
+        },
+        "compensation": {
+            "support": "Proceed with the compensation adjustment while documenting rationale and expectations.",
+            "conditional_support": "Tie compensation change to role scope, performance milestones, market comparison, or a scheduled review date.",
+            "needs_more_info": "Gather role benchmarks, performance evidence, budget constraints, and promotion criteria before deciding.",
+        },
+        "housing": {
+            "support": "Proceed with agreement while documenting payment terms, maintenance duties, and communication expectations.",
+            "conditional_support": "Move forward only with clear written terms around rent, repairs, timing, and consequences if obligations are missed.",
+            "needs_more_info": "Clarify lease terms, payment history, repair obligations, and legal responsibilities before finalizing.",
+        },
+        "general": {
+            "support": "Proceed toward agreement while documenting roles, timing, and expectations.",
+            "conditional_support": "Move forward with conditions, safeguards, and a review point before final acceptance.",
+            "needs_more_info": "Pause final agreement until the parties clarify unresolved facts, risks, and obligations.",
+        },
+    }
+
+    return recommendations[scenario].get(top_position, recommendations[scenario]["conditional_support"])
+
+
+
+
 def build_verdict(results_df: pd.DataFrame, perspective: str = "decision_maker") -> dict:
     """Build the plain-language verdict shown at the top of the results.
  
@@ -456,8 +569,8 @@ def build_verdict(results_df: pd.DataFrame, perspective: str = "decision_maker")
  
  
 def verdict_to_report_text(verdict: dict, results_df: pd.DataFrame) -> str:
-    """Plain-text/markdown version of the verdict, used only for the
-    downloadable report file (not the on-screen UI)."""
+    """Plain-text/markdown version of the verdict and used only for the
+    downloadable report file - NOT the on-screen UI """
     lines = [
         f"**Overall verdict:** {verdict['headline']}",
         "",
@@ -516,7 +629,10 @@ def analyze_negotiation(transcript: str, perspective_label: str = "Deciding part
  
     results_df = pd.DataFrame(rows)
     verdict = build_verdict(results_df, perspective)
-    cards_html = create_framework_cards(results_df, perspective)
+    verdict["dynamic_compromise"] = get_dynamic_compromise(transcript, results_df["predicted_position"].mode()[0])
+    #cards_html = create_framework_cards(results_df, perspective)
+    #V2 fix
+    cards_html = create_framework_cards(results_df, transcript, perspective)
     chart = create_confidence_chart(results_df)
     report_file = create_report_file(verdict, results_df)
  
@@ -546,6 +662,7 @@ def analyze_negotiation(transcript: str, perspective_label: str = "Deciding part
         <div class="consensus-meter">{verdict['segments_html']}</div>
         <div class="verdict-next-step">
             <p class="bottom-line-text"><b>{verdict['bottom_line']}</b></p>
+            <p><b>Scenario-specific compromise:</b> {verdict['dynamic_compromise']}</p>
             {checklist_html}
         </div>
     </div>
